@@ -18,12 +18,8 @@ jobs:
         include:
           - target: windows-amd64
             os: windows-latest
-            ext: .exe
-            archive: zip
           - target: linux-amd64
             os: ubuntu-20.04
-            ext: ""
-            archive: tar.gz
 
     steps:
       - name: Checkout
@@ -36,7 +32,7 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Install Linux system deps
+      - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -y
@@ -70,36 +66,24 @@ jobs:
           NAME="clash-tui"
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
-          DEB_NAME="${NAME}_${VERSION}_amd64"
-          mkdir -p "${DEB_NAME}/DEBIAN"
-          mkdir -p "${DEB_NAME}/usr/bin"
-          mkdir -p "${DEB_NAME}/usr/share/doc/${NAME}"
+          DEB="${NAME}_${VERSION}_amd64"
+          mkdir -p "${DEB}/DEBIAN"
+          mkdir -p "${DEB}/usr/bin"
+          mkdir -p "${DEB}/usr/share/doc/${NAME}"
 
-          cp target/release/clash-tui "${DEB_NAME}/usr/bin/"
-          chmod 755 "${DEB_NAME}/usr/bin/clash-tui"
+          cp target/release/clash-tui "${DEB}/usr/bin/"
+          chmod 755 "${DEB}/usr/bin/clash-tui"
 
-          cat > "${DEB_NAME}/DEBIAN/control" << CTRL
-      Package: ${NAME}
-      Version: ${VERSION}
-      Section: net
-      Priority: optional
-      Architecture: amd64
-      Maintainer: clash-tui <1879615351@users.noreply.github.com>
-      Description: Cross-platform terminal UI for Clash/Mihomo proxy management
-       Embedded mihomo v1.18.10 core, 7 TUI tabs, subscription management,
-       latency testing, system proxy toggle.
-      License: MIT
-      Recommends: libssl3
-      CTRL
+          printf "Package: %s\nVersion: %s\nSection: net\nPriority: optional\nArchitecture: amd64\nMaintainer: clash-tui\nDescription: Clash/Mihomo terminal UI with embedded core\nLicense: MIT\nRecommends: libssl3\n" "$NAME" "$VERSION" > "${DEB}/DEBIAN/control"
 
-          dpkg-deb --build "${DEB_NAME}"
+          dpkg-deb --build "${DEB}"
 
-      - name: Upload artifacts to Release
+      - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            clash-tui_*.*
+            clash-tui_*.zip
+            clash-tui_*.tar.gz
             *.deb
-          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
