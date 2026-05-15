@@ -18,12 +18,18 @@ jobs:
         include:
           - target: windows-amd64
             os: windows-latest
-            exe_suffix: .exe
             target_dir: target/release
+            rust_target: ""
           - target: linux-amd64
             os: ubuntu-22.04
-            exe_suffix: ""
             target_dir: target/x86_64-unknown-linux-musl/release
+            rust_target: x86_64-unknown-linux-musl
+            arch: amd64
+          - target: linux-arm64
+            os: ubuntu-22.04
+            target_dir: target/aarch64-unknown-linux-musl/release
+            rust_target: aarch64-unknown-linux-musl
+            arch: arm64
 
     steps:
       - name: Checkout
@@ -36,64 +42,59 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Setup musl target (Linux)
+      - name: Setup musl targets (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -y
           sudo apt-get install -y musl-tools
-          rustup target add x86_64-unknown-linux-musl
+          rustup target add ${{ matrix.rust_target }}
 
-      - name: Build (Windows)
-        if: runner.os == 'Windows'
-        run: cargo build --release
-
-      - name: Build (Linux musl)
-        if: runner.os == 'Linux'
-        run: cargo build --release --target x86_64-unknown-linux-musl
-
-      - name: Package (Windows zip)
-        if: runner.os == 'Windows'
-        shell: pwsh
+      - name: Build
+        shell: bash
         run: |
-          $name = "clash-tui_${{ github.ref_name }}_windows_amd64"
-          mkdir $name
-          cp ${{ matrix.target_dir }}/clash-tui.exe $name/
-          cp README.md $name/
-          Compress-Archive -Path $name -DestinationPath "$name.zip"
+          if [ -n "${{ matrix.rust_target }}" ]; then
+            cargo build --release --target ${{ matrix.rust_target }}
+          else
+            cargo build --release
+          fi
 
-      - name: Package (Linux tar.gz)
+      - name: Package (Linux tar.gz + deb)
         if: runner.os == 'Linux'
+        shell: bash
         run: |
-          NAME="clash-tui_${{ github.ref_name }}_linux_amd64"
-          mkdir -p "$NAME"
-          cp ${{ matrix.target_dir }}/clash-tui "$NAME/"
-          cp README.md "$NAME/"
-          tar czf "${NAME}.tar.gz" "$NAME"
-
-      - name: Build .deb (Linux)
-        if: runner.os == 'Linux'
-        run: |
+          set -e
           NAME="clash-tui"
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
-          DEB="${NAME}_${VERSION}_amd64"
+          ARCH="${{ matrix.arch }}"
+          BIN="${{ matrix.target_dir }}/clash-tui"
+
+          # tar.gz
+          PKG="clash-tui_${{ github.ref_name }}_linux_${ARCH}"
+          mkdir -p "${PKG}"
+          cp "${BIN}" "${PKG}/"
+          cp README.md "${PKG}/"
+          tar czf "${PKG}.tar.gz" "${PKG}"
+
+          # .deb
+          DEB="${NAME}_${VERSION}_${ARCH}"
           mkdir -p "${DEB}/DEBIAN"
           mkdir -p "${DEB}/usr/bin"
-          mkdir -p "${DEB}/usr/share/doc/${NAME}"
-
-          cp ${{ matrix.target_dir }}/clash-tui "${DEB}/usr/bin/"
+          cp "${BIN}" "${DEB}/usr/bin/"
           chmod 755 "${DEB}/usr/bin/clash-tui"
 
-          printf "Package: %s\nVersion: %s\nSection: net\nPriority: optional\nArchitecture: amd64\nMaintainer: clash-tui\nDescription: Clash/Mihomo terminal UI with embedded core\nLicense: MIT\n" "$NAME" "$VERSION" > "${DEB}/DEBIAN/control"
+          printf "Package: %s\nVersion: %s\nSection: net\nPriority: optional\nArchitecture: %s\nMaintainer: clash-tui\nDescription: Clash/Mihomo terminal UI with embedded core\nLicense: MIT\n" \
+            "$NAME" "$VERSION" "$ARCH" > "${DEB}/DEBIAN/control"
 
           dpkg-deb --build "${DEB}"
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            clash-tui_*.zip
-            clash-tui_*.tar.gz
-            *.deb
+          files: >-
+            ${{ matrix.target == 'windows-amd64' && 'target/release/clash-tui.exe' || '' }}
+            ${{ runner.os == 'Linux' && 'clash-tui_*_linux_*.tar.gz' || '' }}
+            ${{ runner.os == 'Linux' && '*.deb' || '' }}
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -14,6 +14,8 @@ fn main() {
     let target = env::var("TARGET").unwrap();
     let (platform, ext, is_zip) = if target.contains("windows") {
         ("windows-amd64", ".zip", true)
+    } else if target.contains("linux") && target.contains("aarch64") {
+        ("linux-arm64", ".gz", false)
     } else if target.contains("linux") {
         ("linux-amd64", ".gz", false)
     } else {

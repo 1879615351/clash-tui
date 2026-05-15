@@ -26,16 +26,15 @@ A cross-platform terminal UI for Clash/Mihomo proxy management, written in Rust.
 
 ### Windows
 
-Download `clash-tui_*_windows_amd64.zip` from [Releases](https://github.com/1879615351/clash-tui/releases), extract and run:
+Download `clash-tui.exe` from [Releases](https://github.com/1879615351/clash-tui/releases) and run:
 
 ```powershell
-Expand-Archive clash-tui_*_windows_amd64.zip -DestinationPath clash-tui
-.\clash-tui\clash-tui.exe
+.\clash-tui.exe
 ```
 
-### Ubuntu 20.04+
+### Ubuntu / Debian (20.04+)
 
-Download and install the `.deb` package:
+Download and install the `.deb` package (replace `amd64` with `arm64` for ARM):
 
 ```bash
 curl -LO https://github.com/1879615351/clash-tui/releases/latest/download/clash-tui_0.1.0_amd64.deb
