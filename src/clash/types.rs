@@ -79,6 +79,15 @@ pub struct ClashConfigs {
     pub allow_lan: Option<bool>,
     #[serde(rename = "log-level")]
     pub log_level: Option<String>,
+    #[serde(default)]
+    pub tun: Option<TunConfig>,
+}
+
+/// TUN configuration subset from /configs
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TunConfig {
+    #[serde(default)]
+    pub enable: Option<bool>,
 }
 
 /// Response from GET /proxies/{name}/delay

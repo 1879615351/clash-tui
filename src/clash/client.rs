@@ -194,6 +194,11 @@ impl ClashApi for ClashClient {
         self.patch("/configs", &body).await
     }
 
+    async fn set_tun(&self, enable: bool) -> anyhow::Result<()> {
+        let body = serde_json::json!({"tun": {"enable": enable}});
+        self.patch("/configs", &body).await
+    }
+
     async fn reload_config(&self, _config_path: &str) -> anyhow::Result<()> {
         // Mihomo restarts are handled externally by restart_mihomo().
         // This method is kept for API compatibility.
@@ -233,6 +238,7 @@ impl ClashApi for ClashClient {
                 mixed_port: None,
                 allow_lan: None,
                 log_level: None,
+                tun: None,
             }
         });
         let version = version.unwrap_or_else(|e| {
@@ -257,6 +263,11 @@ impl ClashApi for ClashClient {
         });
 
         let mode = configs.mode.unwrap_or_else(|| "rule".into());
+        let tun_enabled = configs
+            .tun
+            .as_ref()
+            .and_then(|t| t.enable)
+            .unwrap_or(false);
 
         let api_reachable = !version.version.is_empty();
 
@@ -272,6 +283,7 @@ impl ClashApi for ClashClient {
             logs,
             rules,
             api_reachable,
+            tun_enabled,
         })
     }
 }

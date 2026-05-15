@@ -187,6 +187,11 @@ async fn dispatch_request(
             client.set_config_mode(mode).await?;
             Ok(serde_json::Value::Null)
         }
+        "set_tun" => {
+            let enable = request.params["enable"].as_bool().unwrap_or(false);
+            client.set_tun(enable).await?;
+            Ok(serde_json::Value::Null)
+        }
         "reload_config" => {
             let path = request.params["path"].as_str().unwrap_or("");
             client.reload_config(path).await?;

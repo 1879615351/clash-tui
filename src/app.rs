@@ -234,6 +234,22 @@ impl App {
                     }
                 });
             }
+            Action::ToggleTun => {
+                let enable = !self.state.tun_enabled;
+                self.state.tun_enabled = enable;
+                self.state
+                    .set_status(format!("TUN: {}", if enable { "ON" } else { "OFF" }));
+                let client = self.clash_client.clone();
+                let tx = self.data_tx.clone();
+                self.rt_handle.spawn(async move {
+                    if let Err(e) = client.set_tun(enable).await {
+                        tracing::error!("Set TUN failed: {}", e);
+                    }
+                    if let Ok(data) = client.refresh_all().await {
+                        let _ = tx.send(data);
+                    }
+                });
+            }
             Action::CloseConnection(id) => {
                 let client = self.clash_client.clone();
                 let tx = self.data_tx.clone();

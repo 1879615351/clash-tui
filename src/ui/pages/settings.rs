@@ -98,6 +98,10 @@ impl Page for SettingsPage {
                 "  Mode: {}",
                 state.clash_mode.to_uppercase()
             ))]),
+            Line::from(vec![Span::raw(format!(
+                "  TUN: {}",
+                if state.tun_enabled { "Enabled" } else { "Disabled" }
+            ))]),
             Line::from(vec![Span::raw("")]),
             Line::from(vec![Span::styled(
                 " Traffic ",

@@ -24,6 +24,7 @@ pub enum Action {
     AddSubscription { name: String, url: String },
     RemoveSubscription(String),
     SetClashMode(String),
+    ToggleTun,
     RestartMihomo,
     CycleTheme,
     RefreshData,

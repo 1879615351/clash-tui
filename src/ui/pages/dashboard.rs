@@ -68,6 +68,7 @@ impl Page for DashboardPage {
             KeyCode::Char('2') => vec![Action::SetClashMode("global".into())],
             KeyCode::Char('3') => vec![Action::SetClashMode("direct".into())],
             KeyCode::Char('R') => vec![Action::RestartMihomo],
+            KeyCode::Char('t') => vec![Action::ToggleTun],
             KeyCode::Char('m') => {
                 let next = match _state.clash_mode.as_str() {
                     "rule" => "global",
@@ -140,6 +141,17 @@ fn render_status_card(frame: &mut Frame, area: Rect, theme: &Theme, state: &AppS
             state.rules.len(),
             state.logs.len(),
         ))]),
+        Line::from(vec![
+            Span::raw("TUN: "),
+            if state.tun_enabled {
+                Span::styled("ON", Style::default().fg(theme.success).add_modifier(Modifier::BOLD))
+            } else {
+                Span::styled(
+                    "OFF",
+                    Style::default().fg(theme.latency_offline),
+                )
+            },
+        ]),
     ];
 
     let para = Paragraph::new(lines)
@@ -273,6 +285,7 @@ fn render_tips_panel(frame: &mut Frame, area: Rect, theme: &Theme, _state: &AppS
         Line::from(" Tab          Next page"),
         Line::from(" m             Cycle mode (Rule/Global/Direct)"),
         Line::from(" 1/2/3        Set mode"),
+        Line::from(" t              Toggle TUN"),
         Line::from(" R             Restart mihomo"),
         Line::from(" T             Cycle theme"),
     ];

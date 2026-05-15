@@ -166,6 +166,15 @@ impl ClashApi for IpcClashClient {
         Ok(())
     }
 
+    async fn set_tun(&self, enable: bool) -> anyhow::Result<()> {
+        self.ipc
+            .lock()
+            .await
+            .send_request("set_tun", serde_json::json!({"enable": enable}))
+            .await?;
+        Ok(())
+    }
+
     async fn reload_config(&self, config_path: &str) -> anyhow::Result<()> {
         self.ipc
             .lock()

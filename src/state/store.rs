@@ -13,6 +13,7 @@ pub struct AppState {
     pub core_version: String,
     pub core_running: bool,
     pub clash_mode: String,
+    pub tun_enabled: bool,
     pub memory_used_bytes: u64,
     pub upload_speed: u64,
     pub download_speed: u64,
@@ -48,6 +49,7 @@ impl Default for AppState {
             core_version: String::new(),
             core_running: false,
             clash_mode: "rule".into(),
+            tun_enabled: false,
             memory_used_bytes: 0,
             upload_speed: 0,
             download_speed: 0,
@@ -81,6 +83,7 @@ impl AppState {
         self.proxy_groups = data.proxy_groups;
         self.memory_used_bytes = data.memory;
         self.clash_mode = data.mode;
+        self.tun_enabled = data.tun_enabled;
         // /traffic returns cumulative bytes — compute speed as delta
         if self.prev_traffic_up == 0 {
             self.upload_speed = 0;

@@ -32,6 +32,7 @@ pub trait ClashApi: Send + Sync {
     async fn get_logs(&self) -> anyhow::Result<Vec<LogEntry>>;
     async fn get_rules(&self) -> anyhow::Result<Vec<Rule>>;
     async fn set_config_mode(&self, mode: &str) -> anyhow::Result<()>;
+    async fn set_tun(&self, enable: bool) -> anyhow::Result<()>;
     async fn reload_config(&self, config_path: &str) -> anyhow::Result<()>;
     async fn refresh_all(&self) -> anyhow::Result<RefreshData>;
 }
@@ -51,4 +52,6 @@ pub struct RefreshData {
     pub rules: Vec<Rule>,
     #[serde(default)]
     pub api_reachable: bool,
+    #[serde(default)]
+    pub tun_enabled: bool,
 }
