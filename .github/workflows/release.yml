@@ -97,10 +97,10 @@ jobs:
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: >-
-            ${{ matrix.target == 'windows-amd64' && 'target/release/clash-tui.exe' || '' }}
-            ${{ runner.os == 'Linux' && 'clash-tui_*_linux_*.tar.gz' || '' }}
-            ${{ runner.os == 'Linux' && '*.deb' || '' }}
+          files: |
+            target/release/clash-tui.exe
+            clash-tui_*_linux_*.tar.gz
+            *.deb
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
