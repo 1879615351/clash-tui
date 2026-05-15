@@ -18,6 +18,10 @@ A cross-platform terminal UI for Clash/Mihomo proxy management, written in Rust.
 - **Themes** — Tokyo Night / Catppuccin / Gruvbox, `T` to cycle, saved to config
 - **Vim Keybindings** — `j/k/↑↓` navigation, `Tab` page switch, `Esc` back
 
+## Screenshot
+
+![clash-tui interface](assets/tui.png)
+
 ## Quick Start
 
 ```bash
