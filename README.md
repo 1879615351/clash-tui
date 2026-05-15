@@ -120,7 +120,7 @@ The embedded mihomo core starts automatically. Add a subscription URL in the **S
 ## CLI Options
 
 ```
-Usage: clash-tui.exe [OPTIONS]
+Usage: clash-tui [OPTIONS]
 
 Options:
   --daemon          Run as background daemon
@@ -132,29 +132,30 @@ Options:
 
 ## Build from Source
 
+Prerequisites: Rust stable, git.
+
 ```bash
-# Prerequisites: Rust nightly
 git clone https://github.com/1879615351/clash-tui.git
 cd clash-tui
+
+# Windows
 cargo build --release
 .\target\release\clash-tui.exe
+
+# Ubuntu / Debian
+sudo apt install musl-tools build-essential
+rustup target add x86_64-unknown-linux-musl
+cargo build --release --target x86_64-unknown-linux-musl
+./target/x86_64-unknown-linux-musl/release/clash-tui
 ```
 
-The build script downloads mihomo v1.18.10 (~28MB) via `build.rs` and embeds it with `include_bytes!`. Final binary is ~35MB, fully self-contained.
-
-### Linux
-
-```bash
-sudo apt install pkg-config libssl-dev build-essential
-cargo build --release
-./target/release/clash-tui
-```
+The build script downloads mihomo v1.18.10 (~28MB) via `build.rs` and embeds it with `include_bytes!`. Final binary is ~35MB, fully self-contained (statically linked on Linux via musl).
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────┐
-│            clash-tui.exe                  │
+│            clash-tui                       │
 │  ┌──────────────────────────────────┐    │
 │  │     TUI (ratatui + crossterm)    │    │
 │  │  7 tabs, vim keybindings         │    │

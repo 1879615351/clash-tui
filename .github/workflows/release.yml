@@ -18,8 +18,12 @@ jobs:
         include:
           - target: windows-amd64
             os: windows-latest
+            exe_suffix: .exe
+            target_dir: target/release
           - target: linux-amd64
             os: ubuntu-22.04
+            exe_suffix: ""
+            target_dir: target/x86_64-unknown-linux-musl/release
 
     steps:
       - name: Checkout
@@ -32,14 +36,20 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Install Linux dependencies
+      - name: Setup musl target (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y build-essential pkg-config libssl-dev
+          sudo apt-get install -y musl-tools
+          rustup target add x86_64-unknown-linux-musl
 
-      - name: Build (release)
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
         run: cargo build --release
+
+      - name: Build (Linux musl)
+        if: runner.os == 'Linux'
+        run: cargo build --release --target x86_64-unknown-linux-musl
 
       - name: Package (Windows zip)
         if: runner.os == 'Windows'
@@ -47,7 +57,7 @@ jobs:
         run: |
           $name = "clash-tui_${{ github.ref_name }}_windows_amd64"
           mkdir $name
-          cp target/release/clash-tui.exe $name/
+          cp ${{ matrix.target_dir }}/clash-tui.exe $name/
           cp README.md $name/
           Compress-Archive -Path $name -DestinationPath "$name.zip"
 
@@ -56,7 +66,7 @@ jobs:
         run: |
           NAME="clash-tui_${{ github.ref_name }}_linux_amd64"
           mkdir -p "$NAME"
-          cp target/release/clash-tui "$NAME/"
+          cp ${{ matrix.target_dir }}/clash-tui "$NAME/"
           cp README.md "$NAME/"
           tar czf "${NAME}.tar.gz" "$NAME"
 
@@ -71,7 +81,7 @@ jobs:
           mkdir -p "${DEB}/usr/bin"
           mkdir -p "${DEB}/usr/share/doc/${NAME}"
 
-          cp target/release/clash-tui "${DEB}/usr/bin/"
+          cp ${{ matrix.target_dir }}/clash-tui "${DEB}/usr/bin/"
           chmod 755 "${DEB}/usr/bin/clash-tui"
 
           printf "Package: %s\nVersion: %s\nSection: net\nPriority: optional\nArchitecture: amd64\nMaintainer: clash-tui\nDescription: Clash/Mihomo terminal UI with embedded core\nLicense: MIT\n" "$NAME" "$VERSION" > "${DEB}/DEBIAN/control"
