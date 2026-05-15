@@ -4,23 +4,36 @@ before:
   hooks: []
 
 builds:
-  - id: clash-tui
+  - id: clash-tui-windows
     builder: prebuilt
     prebuilt:
-      path: target/release/clash-tui{{ .Ext }}
-    goos:
-      - windows
-      - linux
-    goarch:
-      - amd64
+      path: target/release/clash-tui.exe
+    goos: [windows]
+    goarch: [amd64]
+    binary: clash-tui
+
+  - id: clash-tui-linux
+    builder: prebuilt
+    prebuilt:
+      path: target/release/clash-tui
+    goos: [linux]
+    goarch: [amd64]
     binary: clash-tui
 
 archives:
-  - id: default
+  - id: windows-archive
+    builds: [clash-tui-windows]
+    formats: ["zip"]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - src: README.md
+        dst: .
+        strip_parent: true
+
+  - id: linux-archive
+    builds: [clash-tui-linux]
     formats: ["tar.gz"]
-    format_overrides:
-      - goos: windows
-        formats: ["zip"]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     files:
@@ -30,8 +43,7 @@ archives:
 
 nfpms:
   - id: deb
-    builds:
-      - clash-tui
+    builds: [clash-tui-linux]
     package_name: clash-tui
     file_name_template: >-
       {{ .PackageName }}_{{ .Version }}_{{ .Arch }}

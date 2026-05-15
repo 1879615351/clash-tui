@@ -44,6 +44,8 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --single-target --clean
+          args: >-
+            release --clean
+            --id ${{ runner.os == 'Linux' && 'clash-tui-linux' || 'clash-tui-windows' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
