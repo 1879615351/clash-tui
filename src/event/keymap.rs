@@ -10,11 +10,10 @@ pub fn map_key(key: KeyEvent) -> Vec<Action> {
         KeyCode::Char('q') if key.modifiers == KeyModifiers::NONE => vec![Action::Quit],
         KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => vec![Action::Quit],
 
-        // Page switching: Tab, Shift+Tab, Left/Right arrows
-        KeyCode::Tab => vec![Action::NextPage],
+        // Page switching: Tab / Shift+Tab
+        KeyCode::Tab if key.modifiers == KeyModifiers::NONE => vec![Action::NextPage],
+        KeyCode::Tab if key.modifiers == KeyModifiers::SHIFT => vec![Action::PrevPage],
         KeyCode::BackTab => vec![Action::PrevPage],
-        KeyCode::Right | KeyCode::Char('l') => vec![Action::NextPage],
-        KeyCode::Left | KeyCode::Char('h') => vec![Action::PrevPage],
 
         // Help
         KeyCode::Char('?') => vec![Action::ToggleHelp],

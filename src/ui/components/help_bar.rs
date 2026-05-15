@@ -12,7 +12,7 @@ pub fn draw(frame: &mut Frame, area: Rect, theme: &Theme, active_page: PageId) {
         PageId::Dashboard => vec![
             Line::from(vec![
                 Span::styled(
-                    " Tab/←→ ",
+                    " Tab ",
                     Style::default()
                         .fg(theme.accent)
                         .add_modifier(Modifier::BOLD),
@@ -69,23 +69,23 @@ pub fn draw(frame: &mut Frame, area: Rect, theme: &Theme, active_page: PageId) {
             ]),
             Line::from(vec![
                 Span::styled(
-                    " Enter ",
+                    " Enter/→ ",
                     Style::default()
                         .fg(theme.accent)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::raw(" Select/switch  "),
+                Span::raw(" Select/into  "),
                 Span::styled(
-                    " Esc ",
+                    " Esc/← ",
                     Style::default()
                         .fg(theme.accent)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::raw(" Back to groups  "),
+                Span::raw(" Back  "),
             ]),
             Line::from(vec![
                 Span::styled(
-                    " Tab/←→ ",
+                    " Tab ",
                     Style::default()
                         .fg(theme.accent)
                         .add_modifier(Modifier::BOLD),
@@ -126,7 +126,7 @@ pub fn draw(frame: &mut Frame, area: Rect, theme: &Theme, active_page: PageId) {
             ]),
             Line::from(vec![
                 Span::styled(
-                    " Tab/←→ ",
+                    " Tab ",
                     Style::default()
                         .fg(theme.accent)
                         .add_modifier(Modifier::BOLD),
@@ -183,7 +183,7 @@ pub fn draw(frame: &mut Frame, area: Rect, theme: &Theme, active_page: PageId) {
             ]),
             Line::from(vec![
                 Span::styled(
-                    " Tab/←→ ",
+                    " Tab ",
                     Style::default()
                         .fg(theme.accent)
                         .add_modifier(Modifier::BOLD),
@@ -200,7 +200,7 @@ pub fn draw(frame: &mut Frame, area: Rect, theme: &Theme, active_page: PageId) {
             ),
             Span::raw(" Navigate  "),
             Span::styled(
-                " Tab/←→ ",
+                " Tab ",
                 Style::default()
                     .fg(theme.accent)
                     .add_modifier(Modifier::BOLD),
@@ -224,7 +224,7 @@ pub fn draw(frame: &mut Frame, area: Rect, theme: &Theme, active_page: PageId) {
                 ),
                 Span::raw(" Toggle proxy  "),
                 Span::styled(
-                    " Tab/←→ ",
+                    " Tab ",
                     Style::default()
                         .fg(theme.accent)
                         .add_modifier(Modifier::BOLD),
@@ -274,7 +274,7 @@ pub fn draw(frame: &mut Frame, area: Rect, theme: &Theme, active_page: PageId) {
             ]),
             Line::from(vec![
                 Span::styled(
-                    " Tab/←→ ",
+                    " Tab ",
                     Style::default()
                         .fg(theme.accent)
                         .add_modifier(Modifier::BOLD),

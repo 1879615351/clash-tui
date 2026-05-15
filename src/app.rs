@@ -25,6 +25,8 @@ pub struct App {
     theme: Theme,
     data_tx: mpsc::UnboundedSender<RefreshData>,
     data_rx: mpsc::UnboundedReceiver<RefreshData>,
+    latency_tx: mpsc::UnboundedSender<(String, u64)>,
+    latency_rx: mpsc::UnboundedReceiver<(String, u64)>,
     rt_handle: tokio::runtime::Handle,
     pub should_quit: bool,
 }
@@ -37,6 +39,7 @@ impl App {
         rt_handle: tokio::runtime::Handle,
     ) -> Self {
         let (data_tx, data_rx) = mpsc::unbounded_channel();
+        let (latency_tx, latency_rx) = mpsc::unbounded_channel();
         let mut state = AppState::default();
 
         state.api_host = config.api.host.clone();
@@ -58,6 +61,8 @@ impl App {
             theme,
             data_tx,
             data_rx,
+            latency_tx,
+            latency_rx,
             rt_handle,
             should_quit: false,
         }
@@ -70,34 +75,37 @@ impl App {
         let client = self.clash_client.clone();
         let tx = self.data_tx.clone();
         let interval_ms = self.config.ui.refresh_interval_ms;
+
+        // Background refresh loop
         tokio::spawn(async move {
-            refresh_loop(client, tx, interval_ms).await;
+            refresh_loop(client.clone(), tx.clone(), interval_ms).await;
         });
 
-        let client = self.clash_client.clone();
-        let tx = self.data_tx.clone();
-        let has_subs = !self.state.subscriptions.is_empty();
+        // Dedicated startup task: poll mihomo until it responds, then notify TUI
+        let startup_client = self.clash_client.clone();
+        let startup_tx = self.data_tx.clone();
         tokio::spawn(async move {
-            // Auto-load saved config if subscriptions exist
-            if has_subs {
-                if let Ok(core_dir) = crate::core::CoreManager::core_dir() {
-                    let config_path = core_dir.join("config.yaml");
-                    if config_path.exists() {
-                        let path_str = config_path.display().to_string();
-                        tracing::info!("Auto-loading config: {}", path_str);
-                        let _ = client.reload_config(&path_str).await;
-                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            for _ in 0..30 {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                match startup_client.refresh_all().await {
+                    Ok(data) if !data.core_version.is_empty() => {
+                        tracing::info!(
+                            "Startup OK: {} proxies, version {}",
+                            data.proxy_groups.len(),
+                            data.core_version
+                        );
+                        let _ = startup_tx.send(data);
+                        return;
+                    }
+                    Ok(_) => {
+                        // API responded but no version yet — mihomo still loading
+                    }
+                    Err(_) => {
+                        // API not reachable yet — mihomo still starting
                     }
                 }
             }
-            match client.refresh_all().await {
-                Ok(data) => {
-                    let _ = tx.send(data);
-                }
-                Err(e) => {
-                    tracing::error!("Initial refresh failed: {}", e);
-                }
-            }
+            tracing::warn!("Startup task: mihomo not detected after 15s");
         });
 
         loop {
@@ -106,9 +114,7 @@ impl App {
             if event::poll(std::time::Duration::from_millis(10))? {
                 match event::read()? {
                     Event::Key(key) => {
-                        if key.kind == crossterm::event::KeyEventKind::Press
-                            || key.kind == crossterm::event::KeyEventKind::Repeat
-                        {
+                        if key.kind == crossterm::event::KeyEventKind::Press {
                             let actions = self.handle_input(key);
                             for action in actions {
                                 self.dispatch(action);
@@ -127,6 +133,10 @@ impl App {
 
             while let Ok(data) = self.data_rx.try_recv() {
                 self.state.apply_refresh(data);
+            }
+
+            while let Ok((proxy, delay)) = self.latency_rx.try_recv() {
+                self.state.latency_cache.insert(proxy, delay);
             }
 
             for action in self.pages.active_page_mut().tick() {
@@ -159,6 +169,12 @@ impl App {
             Action::ToggleHelp => self.state.show_help = !self.state.show_help,
 
             Action::SelectProxy { group, proxy } => {
+                // Optimistic UI update: immediately show the proxy as active
+                if let Some(g) = self.state.proxy_groups.get_mut(&group) {
+                    g.now = Some(proxy.clone());
+                }
+                self.state.set_status(format!("{} → {}", group, proxy));
+
                 let client = self.clash_client.clone();
                 let tx = self.data_tx.clone();
                 self.rt_handle.spawn(async move {
@@ -173,46 +189,42 @@ impl App {
 
             Action::TestLatency { group: _, proxy } => {
                 let client = self.clash_client.clone();
-                let tx = self.data_tx.clone();
+                let lat_tx = self.latency_tx.clone();
+                let p = proxy.clone();
                 self.rt_handle.spawn(async move {
                     match client
-                        .test_latency(&proxy, "https://www.gstatic.com/generate_204", 5000)
+                        .test_latency(&p, "https://www.gstatic.com/generate_204", 5000)
                         .await
                     {
-                        Ok(result) => tracing::debug!("{}: {}ms", proxy, result.delay),
+                        Ok(result) => {
+                            let _ = lat_tx.send((p, result.delay));
+                        }
                         Err(e) => tracing::warn!("Latency failed: {}", e),
-                    }
-                    // Refresh to update latency display in Proxies page
-                    if let Ok(data) = client.refresh_all().await {
-                        let _ = tx.send(data);
                     }
                 });
             }
 
             Action::TestAllLatency { group: _, proxies } => {
                 let client = self.clash_client.clone();
-                let tx = self.data_tx.clone();
+                let lat_tx = self.latency_tx.clone();
                 let count = proxies.len();
                 self.rt_handle.spawn(async move {
-                    // Test all proxies concurrently (max 10 at a time)
                     let test_url = "https://www.gstatic.com/generate_204";
-                    let mut tasks = Vec::new();
                     for proxy in &proxies {
-                        let c = client.clone();
                         let p = proxy.clone();
-                        tasks.push(tokio::spawn(async move {
-                            c.test_latency(&p, test_url, 3000).await
-                        }));
+                        let lt = lat_tx.clone();
+                        let c = client.clone();
+                        let url = test_url.to_string();
+                        tokio::spawn(async move {
+                            match c.test_latency(&p, &url, 3000).await {
+                                Ok(result) => {
+                                    let _ = lt.send((p, result.delay));
+                                }
+                                Err(_) => {}
+                            }
+                        });
                     }
-                    // Wait for all tests to complete
-                    for task in tasks {
-                        let _ = task.await;
-                    }
-                    tracing::info!("Tested {} proxies", count);
-                    // Refresh UI to show results
-                    if let Ok(data) = client.refresh_all().await {
-                        let _ = tx.send(data);
-                    }
+                    tracing::debug!("Dispatched {} latency tests", count);
                 });
             }
 
@@ -229,6 +241,20 @@ impl App {
                         tracing::error!("Set mode failed: {}", e);
                     }
                     // Refresh to confirm
+                    if let Ok(data) = client.refresh_all().await {
+                        let _ = tx.send(data);
+                    }
+                });
+            }
+            Action::RestartMihomo => {
+                let client = self.clash_client.clone();
+                let tx = self.data_tx.clone();
+                self.state.set_status("Restarting mihomo...");
+                self.rt_handle.spawn(async move {
+                    if let Err(e) = crate::core::CoreManager::restart_mihomo() {
+                        tracing::error!("Restart failed: {}", e);
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                     if let Ok(data) = client.refresh_all().await {
                         let _ = tx.send(data);
                     }
@@ -429,12 +455,35 @@ async fn refresh_loop(
     tx: mpsc::UnboundedSender<RefreshData>,
     interval_ms: u64,
 ) {
+    // Fire immediately, then at interval
+    let mut first = true;
     let mut interval = tokio::time::interval(std::time::Duration::from_millis(interval_ms));
+    let mut tick_count = 0u64;
+    tracing::info!("Refresh loop started ({}ms interval)", interval_ms);
     loop {
-        interval.tick().await;
-        if let Ok(data) = client.refresh_all().await {
-            if tx.send(data).is_err() {
-                break;
+        if first {
+            first = false;
+        } else {
+            interval.tick().await;
+        }
+        tick_count += 1;
+        match client.refresh_all().await {
+            Ok(data) => {
+                if tick_count % 10 == 0 {
+                    tracing::info!(
+                        "Refresh OK: {} proxies, {}MB mem, {}B/s up, {} conns",
+                        data.proxy_groups.len(),
+                        data.memory / 1024 / 1024,
+                        data.upload_speed,
+                        data.active_conn_count,
+                    );
+                }
+                if tx.send(data).is_err() {
+                    break;
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Refresh loop error (tick {}): {}", tick_count, e);
             }
         }
     }

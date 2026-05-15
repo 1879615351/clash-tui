@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Gauge, Paragraph, Sparkline};
+use ratatui::widgets::{Block, Borders, Paragraph, Sparkline};
 use ratatui::Frame;
 
 use super::super::theme::Theme;
@@ -22,47 +22,44 @@ impl Page for DashboardPage {
     fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme, state: &AppState) {
         let rows = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .constraints([
+                Constraint::Length(5),
+                Constraint::Length(3),
+                Constraint::Min(0),
+            ])
             .split(area);
 
+        // Row 1: Core status + Mode + Proxy summary
         let top = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(33),
-                Constraint::Percentage(33),
-                Constraint::Percentage(34),
+                Constraint::Percentage(40),
+                Constraint::Percentage(30),
+                Constraint::Percentage(30),
             ])
             .split(rows[0]);
 
-        let bottom = Layout::default()
+        render_status_card(frame, top[0], theme, state);
+        render_mode_card(frame, top[1], theme, state);
+        render_proxy_summary(frame, top[2], theme, state);
+
+        // Row 2: Upload + Download sparklines
+        let mid = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(rows[1]);
 
-        // Row 1: Core Status, Mode, Memory
-        render_core_card(frame, top[0], theme, state);
-        render_mode_card(frame, top[1], theme, state);
-        render_memory_card(frame, top[2], theme, state);
+        render_traffic_sparkline(frame, mid[0], theme, state, "Upload");
+        render_traffic_sparkline(frame, mid[1], theme, state, "Download");
 
-        // Row 2: Upload traffic, Download traffic
-        render_traffic_card(
-            frame,
-            bottom[0],
-            theme,
-            state,
-            "Upload",
-            state.upload_speed,
-            state.total_upload,
-        );
-        render_traffic_card(
-            frame,
-            bottom[1],
-            theme,
-            state,
-            "Download",
-            state.download_speed,
-            state.total_download,
-        );
+        // Row 3: Memory gauge + quick tips
+        let bottom = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(rows[2]);
+
+        render_memory_panel(frame, bottom[0], theme, state);
+        render_tips_panel(frame, bottom[1], theme, state);
     }
 
     fn handle_key(&mut self, key: KeyEvent, _state: &AppState) -> Vec<Action> {
@@ -70,8 +67,8 @@ impl Page for DashboardPage {
             KeyCode::Char('1') => vec![Action::SetClashMode("rule".into())],
             KeyCode::Char('2') => vec![Action::SetClashMode("global".into())],
             KeyCode::Char('3') => vec![Action::SetClashMode("direct".into())],
+            KeyCode::Char('R') => vec![Action::RestartMihomo],
             KeyCode::Char('m') => {
-                // Cycle mode
                 let next = match _state.clash_mode.as_str() {
                     "rule" => "global",
                     "global" => "direct",
@@ -92,35 +89,61 @@ impl Page for DashboardPage {
     }
 }
 
-fn render_core_card(frame: &mut Frame, area: Rect, theme: &Theme, state: &AppState) {
-    let status = if state.core_running {
-        Span::styled(
-            "Running",
+fn render_status_card(frame: &mut Frame, area: Rect, theme: &Theme, state: &AppState) {
+    let (ver_style, ver_text) = if state.core_running {
+        (
             Style::default()
                 .fg(theme.success)
                 .add_modifier(Modifier::BOLD),
+            format!("mihomo {}", state.core_version),
         )
     } else if state.api_connected {
-        Span::styled("Connected", Style::default().fg(theme.success))
+        (Style::default().fg(theme.success), "Connected".into())
     } else {
-        Span::styled("Disconnected", Style::default().fg(theme.error))
+        (
+            Style::default()
+                .fg(theme.warning)
+                .add_modifier(Modifier::BOLD),
+            "Starting...".into(),
+        )
     };
 
-    let version = &state.core_version;
     let lines = vec![
-        Line::from(vec![Span::raw("Status: "), status]),
+        Line::from(vec![Span::styled(ver_text, ver_style)]),
+        Line::from(vec![
+            Span::raw("Mem: "),
+            Span::styled(
+                format_memory(state.memory_used_bytes),
+                Style::default().fg(theme.accent),
+            ),
+            Span::raw("  Conns: "),
+            Span::styled(
+                format!("{}", state.active_conn_count),
+                Style::default().fg(theme.info),
+            ),
+        ]),
+        Line::from(vec![
+            Span::raw("↑ "),
+            Span::styled(
+                format_speed(state.upload_speed),
+                Style::default().fg(theme.latency_mid),
+            ),
+            Span::raw("  ↓ "),
+            Span::styled(
+                format_speed(state.download_speed),
+                Style::default().fg(theme.accent),
+            ),
+        ]),
         Line::from(vec![Span::raw(format!(
-            "Version: {}",
-            if version.is_empty() { "N/A" } else { version }
-        ))]),
-        Line::from(vec![Span::raw(format!(
-            "Conns: {}",
-            state.active_conn_count
+            "{} groups  {} rules  {} logs",
+            state.proxy_groups.len(),
+            state.rules.len(),
+            state.logs.len(),
         ))]),
     ];
 
     let para = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title(" Core "))
+        .block(Block::default().borders(Borders::ALL).title(" Status "))
         .style(Style::default().fg(theme.fg));
     frame.render_widget(para, area);
 }
@@ -142,7 +165,7 @@ fn render_mode_card(frame: &mut Frame, area: Rect, theme: &Theme, state: &AppSta
             ),
         ]),
         Line::from(vec![Span::raw("")]),
-        Line::from(vec![Span::raw(" m  Cycle mode")]),
+        Line::from(vec![Span::raw(" m  cycle")]),
         Line::from(vec![Span::raw(" 1  Rule  2  Global  3  Direct")]),
     ];
 
@@ -152,66 +175,130 @@ fn render_mode_card(frame: &mut Frame, area: Rect, theme: &Theme, state: &AppSta
     frame.render_widget(para, area);
 }
 
-fn render_memory_card(frame: &mut Frame, area: Rect, theme: &Theme, state: &AppState) {
-    let mem_mb = state.memory_used_bytes / 1024 / 1024;
-    let ratio = (mem_mb as f64 / 512.0).min(1.0); // assume 512MB as max
+fn render_proxy_summary(frame: &mut Frame, area: Rect, theme: &Theme, state: &AppState) {
+    let mut groups: Vec<_> = state.proxy_groups.iter().collect();
+    groups.sort_by(|a, b| a.0.cmp(b.0));
 
-    let inner = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Length(1)])
-        .split(area);
+    let lines: Vec<Line> = groups
+        .iter()
+        .take(4)
+        .map(|(name, group)| {
+            let current = group.now.as_deref().unwrap_or("?");
+            Line::from(vec![
+                Span::styled(name.as_str(), Style::default().fg(theme.accent)),
+                Span::raw(" → "),
+                Span::raw(current),
+            ])
+        })
+        .collect();
 
-    let gauge = Gauge::default()
-        .block(Block::default().borders(Borders::ALL).title(" Memory "))
-        .gauge_style(Style::default().fg(theme.accent))
-        .ratio(ratio)
-        .label(format!("{}MB", mem_mb));
-    frame.render_widget(gauge, inner[1]);
+    let more = if groups.len() > 4 {
+        format!("... and {} more", groups.len() - 4)
+    } else {
+        String::new()
+    };
+
+    let mut all_lines = lines;
+    if !more.is_empty() {
+        all_lines.push(Line::from(Span::styled(
+            more,
+            Style::default().fg(theme.latency_offline),
+        )));
+    }
+    if all_lines.is_empty() {
+        all_lines.push(Line::from("No proxies"));
+    }
+
+    let para = Paragraph::new(all_lines)
+        .block(Block::default().borders(Borders::ALL).title(" Proxies "))
+        .style(Style::default().fg(theme.fg));
+    frame.render_widget(para, area);
 }
 
-fn render_traffic_card(
+fn render_traffic_sparkline(
     frame: &mut Frame,
     area: Rect,
     theme: &Theme,
     state: &AppState,
     label: &str,
-    speed: u64,
-    _total: u64,
 ) {
-    let inner = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
-        .split(area);
-
-    let speed_label = format_speed(speed);
-
-    let history = if label == "Upload" {
-        &state.speed_history_up
+    let (speed, history) = if label == "Upload" {
+        (state.upload_speed, &state.speed_history_up)
     } else {
-        &state.speed_history_down
+        (state.download_speed, &state.speed_history_down)
     };
 
-    // Convert to u64 values for sparkline (max 64 datapoints)
     let data: Vec<u64> = if history.is_empty() {
         vec![0]
     } else {
-        history.iter().map(|&v| v / 1024).collect() // KB/s
+        history.iter().map(|&v| v / 1024).collect()
     };
 
     let sparkline = Sparkline::default()
-        .block(Block::default().title(format!(" {}: {}/s ", label, speed_label)))
+        .block(Block::default().title(format!(" {}: {}/s ", label, format_speed(speed))))
         .data(&data)
         .style(Style::default().fg(theme.accent));
 
-    frame.render_widget(sparkline, inner[1]);
+    frame.render_widget(sparkline, area);
+}
+
+fn render_memory_panel(frame: &mut Frame, area: Rect, theme: &Theme, state: &AppState) {
+    let lines = vec![
+        Line::from(vec![
+            Span::raw("Memory: "),
+            Span::styled(
+                format_memory(state.memory_used_bytes),
+                Style::default().fg(theme.accent),
+            ),
+        ]),
+        Line::from(vec![Span::raw("")]),
+        Line::from(vec![Span::styled(
+            "API: 127.0.0.1:9090",
+            Style::default().fg(theme.latency_offline),
+        )]),
+        Line::from(vec![Span::styled(
+            "Proxy: 127.0.0.1:7890",
+            Style::default().fg(theme.latency_offline),
+        )]),
+    ];
+
+    let para = Paragraph::new(lines)
+        .block(Block::default().borders(Borders::ALL).title(" Info "))
+        .style(Style::default().fg(theme.fg));
+    frame.render_widget(para, area);
+}
+
+fn render_tips_panel(frame: &mut Frame, area: Rect, theme: &Theme, _state: &AppState) {
+    let lines = vec![
+        Line::from(" Tab          Next page"),
+        Line::from(" m             Cycle mode (Rule/Global/Direct)"),
+        Line::from(" 1/2/3        Set mode"),
+        Line::from(" R             Restart mihomo"),
+        Line::from(" T             Cycle theme"),
+    ];
+
+    let para = Paragraph::new(lines)
+        .block(Block::default().borders(Borders::ALL).title(" Keys "))
+        .style(Style::default().fg(theme.latency_offline));
+    frame.render_widget(para, area);
+}
+
+fn format_memory(bytes: u64) -> String {
+    if bytes >= 1_048_576 {
+        format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+    } else if bytes >= 1024 {
+        format!("{:.0} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{} B", bytes)
+    }
 }
 
 fn format_speed(bytes: u64) -> String {
     if bytes >= 1_048_576 {
-        format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+        format!("{:.1} MB/s", bytes as f64 / 1_048_576.0)
     } else if bytes >= 1024 {
-        format!("{:.1} KB", bytes as f64 / 1024.0)
+        format!("{:.1} KB/s", bytes as f64 / 1024.0)
     } else {
-        format!("{} B", bytes)
+        format!("{} B/s", bytes)
     }
 }

@@ -11,7 +11,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &AppState, theme: &Theme) {
     let status = if state.api_connected {
         "Connected"
     } else {
-        "Disconnected"
+        "Starting..."
     };
 
     let right_text = format!(

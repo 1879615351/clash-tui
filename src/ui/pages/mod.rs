@@ -45,7 +45,7 @@ impl PageId {
             PageId::Dashboard => "Dashboard",
             PageId::Proxies => "Proxies",
             PageId::Connections => "Conns",
-            PageId::Logs => "Logs",
+            PageId::Logs => "Mihomo Logs",
             PageId::Rules => "Rules",
             PageId::Settings => "Settings",
             PageId::Subscriptions => "Subs",

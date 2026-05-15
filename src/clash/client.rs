@@ -16,7 +16,10 @@ pub struct ClashClient {
 impl ClashClient {
     pub fn new(host: &str, port: u16, secret: Option<String>) -> Self {
         Self {
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .no_proxy()
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
             base_url: format!("http://{}:{}", host, port),
             secret,
         }
@@ -141,7 +144,7 @@ impl ClashApi for ClashClient {
         let path = format!(
             "/proxies/{}/delay?url={}&timeout={}",
             encode_uri_component(proxy),
-            url,
+            encode_uri_component(url),
             timeout
         );
         self.get(&path).await
@@ -207,25 +210,49 @@ impl ClashApi for ClashClient {
             self.get_rules(),
         );
 
-        let proxy_groups = proxies.unwrap_or_default();
-        let traffic = traffic.unwrap_or(Traffic { up: 0, down: 0 });
-        let memory = memory.unwrap_or(0);
-        let configs = configs.unwrap_or(ClashConfigs {
-            mode: Some("rule".into()),
-            port: None,
-            socks_port: None,
-            mixed_port: None,
-            allow_lan: None,
-            log_level: None,
+        let proxy_groups = proxies.unwrap_or_else(|e| {
+            tracing::warn!("get_proxies failed: {}", e);
+            Default::default()
         });
-        let version = version.unwrap_or(VersionInfo {
-            version: String::new(),
-            meta: None,
+        let traffic = traffic.unwrap_or_else(|e| {
+            tracing::warn!("get_traffic failed: {}", e);
+            Traffic { up: 0, down: 0 }
         });
-        let connections = conns.unwrap_or_default();
+        let memory = memory.unwrap_or_else(|e| {
+            tracing::warn!("get_memory failed: {}", e);
+            0
+        });
+        let configs = configs.unwrap_or_else(|e| {
+            tracing::warn!("get_configs failed: {}", e);
+            ClashConfigs {
+                mode: Some("rule".into()),
+                port: None,
+                socks_port: None,
+                mixed_port: None,
+                allow_lan: None,
+                log_level: None,
+            }
+        });
+        let version = version.unwrap_or_else(|e| {
+            tracing::warn!("get_version failed: {}", e);
+            VersionInfo {
+                version: String::new(),
+                meta: None,
+            }
+        });
+        let connections = conns.unwrap_or_else(|e| {
+            tracing::warn!("get_connections failed: {}", e);
+            Vec::new()
+        });
         let active_conn_count = connections.len();
-        let logs = logs.unwrap_or_default();
-        let rules = rules.unwrap_or_default();
+        let logs = logs.unwrap_or_else(|e| {
+            tracing::warn!("get_logs failed: {}", e);
+            Vec::new()
+        });
+        let rules = rules.unwrap_or_else(|e| {
+            tracing::warn!("get_rules failed: {}", e);
+            Vec::new()
+        });
 
         let mode = configs.mode.unwrap_or_else(|| "rule".into());
 

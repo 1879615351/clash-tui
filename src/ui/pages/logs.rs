@@ -84,7 +84,10 @@ impl Page for LogsPage {
         } else {
             String::new()
         };
-        let title = format!(" Logs ({}){} {} ", count, filter_info, auto);
+        let title = format!(
+            " Mihomo Logs ({}){} {} (from mihomo.log) ",
+            count, filter_info, auto
+        );
 
         let mut list_state = self.list_state.clone();
         *list_state.offset_mut() = self.scroll.get();

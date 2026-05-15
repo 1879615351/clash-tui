@@ -28,7 +28,12 @@ impl Page for SettingsPage {
                     .add_modifier(Modifier::BOLD),
             )
         } else {
-            Span::styled("DISABLED", Style::default().fg(theme.latency_offline))
+            Span::styled(
+                "DISABLED",
+                Style::default()
+                    .fg(theme.error)
+                    .add_modifier(Modifier::BOLD),
+            )
         };
 
         let proxy_addr = state.proxy_state.address();
@@ -58,6 +63,12 @@ impl Page for SettingsPage {
                 "  Config: {}",
                 crate::config::AppConfig::config_path()
                     .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| "N/A".into())
+            ))]),
+            Line::from(vec![Span::raw(format!(
+                "  Log:    {}",
+                crate::config::AppConfig::config_dir()
+                    .map(|d| d.join("clash-tui.log").display().to_string())
                     .unwrap_or_else(|_| "N/A".into())
             ))]),
             Line::from(vec![Span::raw("")]),
