@@ -62,8 +62,7 @@ impl Daemon {
             }
         };
 
-        let config_dir = AppConfig::config_dir()?;
-        let work_dir = config_dir.join("clash");
+        let work_dir = crate::core::CoreManager::core_dir()?;
 
         // Ensure config directory exists
         std::fs::create_dir_all(&work_dir)?;

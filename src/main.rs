@@ -142,6 +142,14 @@ async fn start_mihomo_background(host: &str, port: u16, data_tx: mpsc::Unbounded
             .stderr(std::process::Stdio::null())
             .output();
     }
+    #[cfg(not(windows))]
+    {
+        let _ = std::process::Command::new("pkill")
+            .args(["-9", "mihomo"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .output();
+    }
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     tracing::info!("Starting embedded mihomo...");
