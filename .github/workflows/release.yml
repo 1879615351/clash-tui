@@ -7,18 +7,24 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 jobs:
-  goreleaser:
-    name: Build & Release (${{ matrix.os }})
+  build:
+    name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - windows-latest
-          - ubuntu-20.04
+        include:
+          - target: windows-amd64
+            os: windows-latest
+            ext: .exe
+            archive: zip
+          - target: linux-amd64
+            os: ubuntu-20.04
+            ext: ""
+            archive: tar.gz
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,11 +45,61 @@ jobs:
       - name: Build (release)
         run: cargo build --release
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+      - name: Package (Windows zip)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "clash-tui_${{ github.ref_name }}_windows_amd64"
+          mkdir $name
+          cp target/release/clash-tui.exe $name/
+          cp README.md $name/
+          Compress-Archive -Path $name -DestinationPath "$name.zip"
+
+      - name: Package (Linux tar.gz)
+        if: runner.os == 'Linux'
+        run: |
+          NAME="clash-tui_${{ github.ref_name }}_linux_amd64"
+          mkdir -p "$NAME"
+          cp target/release/clash-tui "$NAME/"
+          cp README.md "$NAME/"
+          tar czf "${NAME}.tar.gz" "$NAME"
+
+      - name: Build .deb (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          NAME="clash-tui"
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          DEB_NAME="${NAME}_${VERSION}_amd64"
+          mkdir -p "${DEB_NAME}/DEBIAN"
+          mkdir -p "${DEB_NAME}/usr/bin"
+          mkdir -p "${DEB_NAME}/usr/share/doc/${NAME}"
+
+          cp target/release/clash-tui "${DEB_NAME}/usr/bin/"
+          chmod 755 "${DEB_NAME}/usr/bin/clash-tui"
+
+          cat > "${DEB_NAME}/DEBIAN/control" << CTRL
+      Package: ${NAME}
+      Version: ${VERSION}
+      Section: net
+      Priority: optional
+      Architecture: amd64
+      Maintainer: clash-tui <1879615351@users.noreply.github.com>
+      Description: Cross-platform terminal UI for Clash/Mihomo proxy management
+       Embedded mihomo v1.18.10 core, 7 TUI tabs, subscription management,
+       latency testing, system proxy toggle.
+      License: MIT
+      Recommends: libssl3
+      CTRL
+
+          dpkg-deb --build "${DEB_NAME}"
+
+      - name: Upload artifacts to Release
+        uses: softprops/action-gh-release@v2
         with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: release --clean
+          files: |
+            clash-tui_*.*
+            *.deb
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
