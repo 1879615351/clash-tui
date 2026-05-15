@@ -74,7 +74,7 @@ jobs:
           cp target/release/clash-tui "${DEB}/usr/bin/"
           chmod 755 "${DEB}/usr/bin/clash-tui"
 
-          printf "Package: %s\nVersion: %s\nSection: net\nPriority: optional\nArchitecture: amd64\nMaintainer: clash-tui\nDescription: Clash/Mihomo terminal UI with embedded core\nLicense: MIT\nRecommends: libssl3\n" "$NAME" "$VERSION" > "${DEB}/DEBIAN/control"
+          printf "Package: %s\nVersion: %s\nSection: net\nPriority: optional\nArchitecture: amd64\nMaintainer: clash-tui\nDescription: Clash/Mihomo terminal UI with embedded core\nLicense: MIT\n" "$NAME" "$VERSION" > "${DEB}/DEBIAN/control"
 
           dpkg-deb --build "${DEB}"
 

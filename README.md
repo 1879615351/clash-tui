@@ -33,7 +33,7 @@ Expand-Archive clash-tui_*_windows_amd64.zip -DestinationPath clash-tui
 .\clash-tui\clash-tui.exe
 ```
 
-### Ubuntu 22.04+
+### Ubuntu 20.04+
 
 Download and install the `.deb` package:
 
