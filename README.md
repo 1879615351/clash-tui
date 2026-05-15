@@ -24,10 +24,34 @@ A cross-platform terminal UI for Clash/Mihomo proxy management, written in Rust.
 
 ## Quick Start
 
-```bash
-# Download from releases, then run
-.\clash-tui.exe
+### Windows
+
+Download `clash-tui_*_windows_amd64.zip` from [Releases](https://github.com/1879615351/clash-tui/releases), extract and run:
+
+```powershell
+Expand-Archive clash-tui_*_windows_amd64.zip -DestinationPath clash-tui
+.\clash-tui\clash-tui.exe
 ```
+
+### Ubuntu 22.04+
+
+Download and install the `.deb` package:
+
+```bash
+curl -LO https://github.com/1879615351/clash-tui/releases/latest/download/clash-tui_0.1.0_amd64.deb
+sudo dpkg -i clash-tui_0.1.0_amd64.deb
+clash-tui
+```
+
+Or use the portable `.tar.gz`:
+
+```bash
+curl -LO https://github.com/1879615351/clash-tui/releases/latest/download/clash-tui_0.1.0_linux_amd64.tar.gz
+tar xzf clash-tui_0.1.0_linux_amd64.tar.gz
+./clash-tui_0.1.0_linux_amd64/clash-tui
+```
+
+### Usage
 
 The embedded mihomo core starts automatically. Add a subscription URL in the **Subs** page (`a` to add, paste URL, `Enter` to confirm), then press `u` to download. Proxies appear in the **Proxies** page.
 
