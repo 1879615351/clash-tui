@@ -24,17 +24,18 @@ A cross-platform terminal UI for Clash/Mihomo proxy management, written in Rust.
 
 ## Quick Start
 
-### Windows
+Download the latest binary from [Releases](https://github.com/1879615351/clash-tui/releases).
 
-Download `clash-tui.exe` from [Releases](https://github.com/1879615351/clash-tui/releases) and run:
+### Windows (amd64)
 
 ```powershell
+# Direct download, run directly
 .\clash-tui.exe
 ```
 
-### Ubuntu / Debian (20.04+)
+### Linux amd64 / x86_64 (Ubuntu 20.04+, Debian)
 
-Download and install the `.deb` package (replace `amd64` with `arm64` for ARM):
+**.deb** (recommended):
 
 ```bash
 curl -LO https://github.com/1879615351/clash-tui/releases/latest/download/clash-tui_0.1.0_amd64.deb
@@ -42,12 +43,30 @@ sudo dpkg -i clash-tui_0.1.0_amd64.deb
 clash-tui
 ```
 
-Or use the portable `.tar.gz`:
+**Portable `.tar.gz`**:
 
 ```bash
-curl -LO https://github.com/1879615351/clash-tui/releases/latest/download/clash-tui_0.1.0_linux_amd64.tar.gz
-tar xzf clash-tui_0.1.0_linux_amd64.tar.gz
-./clash-tui_0.1.0_linux_amd64/clash-tui
+curl -LO https://github.com/1879615351/clash-tui/releases/latest/download/clash-tui_v0.1.0_linux_amd64.tar.gz
+tar xzf clash-tui_v0.1.0_linux_amd64.tar.gz
+./clash-tui_v0.1.0_linux_amd64/clash-tui
+```
+
+### Linux arm64 / aarch64 (Ubuntu 20.04+, Debian)
+
+**.deb**:
+
+```bash
+curl -LO https://github.com/1879615351/clash-tui/releases/latest/download/clash-tui_0.1.0_arm64.deb
+sudo dpkg -i clash-tui_0.1.0_arm64.deb
+clash-tui
+```
+
+**Portable `.tar.gz`**:
+
+```bash
+curl -LO https://github.com/1879615351/clash-tui/releases/latest/download/clash-tui_v0.1.0_linux_arm64.tar.gz
+tar xzf clash-tui_v0.1.0_linux_arm64.tar.gz
+./clash-tui_v0.1.0_linux_arm64/clash-tui
 ```
 
 ### Usage
