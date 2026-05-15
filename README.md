@@ -125,26 +125,26 @@ cargo build --release
 ## Architecture
 
 ```
-┌─────────────────────────────────────┐
-│            clash-tui.exe             │
-│  ┌──────────────────────────────┐   │
-│  │     TUI (ratatui + crossterm) │   │
-│  │  7 tabs, vim keybindings      │   │
-│  ├──────────────────────────────┤   │
-│  │     App Core                  │   │
-│  │  event loop, state, dispatch  │   │
-│  ├──────────────────────────────┤   │
-│  │  ClashApi trait               │   │
-│  │  ├─ HttpClashClient (direct)  │   │
-│  │  └─ IpcClashClient  (daemon)  │── HTTP ──► mihomo :9090
-│  ├──────────────────────────────┤   │
-│  │  Startup Task (background)    │   │
-│  │  polls /version → notifies UI │   │
-│  └──────────────────────────────┘   │
-│                                      │
-│  mihomo v1.18.10 (embedded, 28MB)   │
-│  auto-start, auto-cleanup            │
-└─────────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│            clash-tui.exe                  │
+│  ┌──────────────────────────────────┐    │
+│  │     TUI (ratatui + crossterm)    │    │
+│  │  7 tabs, vim keybindings         │    │
+│  ├──────────────────────────────────┤    │
+│  │     App Core                     │    │
+│  │  event loop, state, dispatch     │    │
+│  ├──────────────────────────────────┤    │
+│  │  ClashApi trait                  │    │
+│  │  ├─ ClashClient   (direct HTTP)  │    │
+│  │  └─ IpcClashClient (IPC daemon)  │── HTTP ──► mihomo :9090
+│  ├──────────────────────────────────┤    │
+│  │  Refresh loop (1s interval)      │    │
+│  │  → refresh_all → data_tx → UI    │    │
+│  └──────────────────────────────────┘    │
+│                                           │
+│  mihomo v1.18.10 (embedded, 28MB)        │
+│  background start → signal → UI updates   │
+└──────────────────────────────────────────┘
 ```
 
 ## Config
@@ -155,6 +155,7 @@ cargo build --release
 [api]
 host = "127.0.0.1"
 port = 9090
+# secret = "your-api-secret"  # optional, for authenticated mihomo API
 
 [ui]
 theme = "tokyo-night"       # tokyo-night | catppuccin | gruvbox
@@ -163,6 +164,10 @@ refresh_interval_ms = 1000
 [core]
 core_type = "mihomo"
 core_path = ""              # empty = use embedded binary
+
+[subscription]
+auto_update = false
+interval_hours = 24
 ```
 
 ### File locations
@@ -185,6 +190,16 @@ core_path = ""              # empty = use embedded binary
 - **CLI**: clap 4
 - **Embedded core**: build.rs → GitHub Releases download → `include_bytes!`
 - **Platform (Win)**: winreg (system proxy), flate2 + zip (core extraction)
+
+## Troubleshooting
+
+If the UI shows "Starting..." indefinitely:
+
+1. Check if mihomo is running: `tasklist | findstr mihomo`
+2. Check mihomo's own log: `%APPDATA%/clash-tui/core/mihomo.log` — mihomo may have crashed on startup (e.g. missing subscription files, invalid config)
+3. Check the TUI app log: `%APPDATA%/clash-tui/clash-tui.log` — look for `Mihomo API ready` (success) or `Failed to install core` / `Failed to spawn mihomo` (errors)
+
+The TUI regenerates `config.yaml` from available subscription files on every startup. If subscription files (`sub_*.yaml`) were deleted but `config.yaml` still references them, mihomo will crash. Delete `config.yaml` to force a fresh minimal config, or re-download subscriptions with `u` in the Subs page.
 
 ## License
 

@@ -36,9 +36,10 @@ impl App {
         config: AppConfig,
         theme: Theme,
         clash_client: Box<dyn ClashApi>,
+        data_tx: mpsc::UnboundedSender<RefreshData>,
+        data_rx: mpsc::UnboundedReceiver<RefreshData>,
         rt_handle: tokio::runtime::Handle,
     ) -> Self {
-        let (data_tx, data_rx) = mpsc::unbounded_channel();
         let (latency_tx, latency_rx) = mpsc::unbounded_channel();
         let mut state = AppState::default();
 
@@ -76,36 +77,9 @@ impl App {
         let tx = self.data_tx.clone();
         let interval_ms = self.config.ui.refresh_interval_ms;
 
-        // Background refresh loop
+        // Background refresh loop — handles initial connection detection and periodic updates
         tokio::spawn(async move {
             refresh_loop(client.clone(), tx.clone(), interval_ms).await;
-        });
-
-        // Dedicated startup task: poll mihomo until it responds, then notify TUI
-        let startup_client = self.clash_client.clone();
-        let startup_tx = self.data_tx.clone();
-        tokio::spawn(async move {
-            for _ in 0..30 {
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                match startup_client.refresh_all().await {
-                    Ok(data) if !data.core_version.is_empty() => {
-                        tracing::info!(
-                            "Startup OK: {} proxies, version {}",
-                            data.proxy_groups.len(),
-                            data.core_version
-                        );
-                        let _ = startup_tx.send(data);
-                        return;
-                    }
-                    Ok(_) => {
-                        // API responded but no version yet — mihomo still loading
-                    }
-                    Err(_) => {
-                        // API not reachable yet — mihomo still starting
-                    }
-                }
-            }
-            tracing::warn!("Startup task: mihomo not detected after 15s");
         });
 
         loop {
@@ -338,6 +312,8 @@ impl App {
 
                 let client = self.clash_client.clone();
                 let tx = self.data_tx.clone();
+                let api_host = self.state.api_host.clone();
+                let api_port = self.state.api_port;
                 self.rt_handle.spawn(async move {
                     match SubscriptionManager::download(&url_c).await {
                         Ok(config) => {
@@ -345,8 +321,8 @@ impl App {
                                 .map(|p| p.len())
                                 .unwrap_or(0);
                             tracing::info!("Downloaded {} proxies for '{}'", count, sub_name);
-                            match crate::core::CoreManager::save_subscription_config(
-                                &sub_name, &config,
+                            match crate::core::CoreManager::save_subscription_config_with_api(
+                                &sub_name, &config, &api_host, api_port,
                             ) {
                                 Ok(config_path) => {
                                     tracing::info!("Config saved: {}", config_path);

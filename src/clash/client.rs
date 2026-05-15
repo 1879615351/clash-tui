@@ -18,6 +18,8 @@ impl ClashClient {
         Self {
             http: reqwest::Client::builder()
                 .no_proxy()
+                .connect_timeout(std::time::Duration::from_secs(3))
+                .timeout(std::time::Duration::from_secs(10))
                 .build()
                 .unwrap_or_else(|_| reqwest::Client::new()),
             base_url: format!("http://{}:{}", host, port),
@@ -256,6 +258,8 @@ impl ClashApi for ClashClient {
 
         let mode = configs.mode.unwrap_or_else(|| "rule".into());
 
+        let api_reachable = !version.version.is_empty();
+
         Ok(RefreshData {
             proxy_groups,
             memory,
@@ -267,6 +271,7 @@ impl ClashApi for ClashClient {
             connections,
             logs,
             rules,
+            api_reachable,
         })
     }
 }

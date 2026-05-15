@@ -38,6 +38,7 @@ pub struct AppState {
     status_ttl: u8,
     pub active_page: PageId,
     pub show_help: bool,
+    consecutive_failures: u8,
 }
 
 impl Default for AppState {
@@ -70,6 +71,7 @@ impl Default for AppState {
             status_ttl: 0,
             active_page: PageId::Dashboard,
             show_help: false,
+            consecutive_failures: 0,
         }
     }
 }
@@ -81,7 +83,6 @@ impl AppState {
         self.clash_mode = data.mode;
         // /traffic returns cumulative bytes — compute speed as delta
         if self.prev_traffic_up == 0 {
-            // First reading: don't show the entire cumulative total
             self.upload_speed = 0;
             self.download_speed = 0;
         } else {
@@ -93,14 +94,32 @@ impl AppState {
         self.total_upload = data.upload_speed;
         self.total_download = data.download_speed;
         self.active_conn_count = data.active_conn_count;
-        let got_version = !data.core_version.is_empty();
-        self.core_version = data.core_version;
+        // Only overwrite version with non-empty data (preserve last known good)
+        if !data.core_version.is_empty() {
+            self.core_version = data.core_version;
+        }
         self.connections = data.connections;
-        self.load_mihomo_logs();
+        // Prefer API-delivered logs (real-time, unbuffered); fall back to file
+        if !data.logs.is_empty() {
+            self.logs = data.logs;
+        } else {
+            self.load_mihomo_logs();
+        }
         self.rules = data.rules;
-        if got_version {
-            self.core_running = true;
+
+        // Connection state: latch upward immediately, debounce downward
+        // so a stale tick (started before mihomo was ready) can't revert
+        // a fresh "connected" signal.
+        if data.api_reachable {
             self.api_connected = true;
+            self.core_running = true;
+            self.consecutive_failures = 0;
+        } else {
+            self.consecutive_failures += 1;
+            if self.consecutive_failures >= 3 {
+                self.api_connected = false;
+                self.core_running = false;
+            }
         }
 
         // Track speed history (max 60 samples ≈ 1 minute)

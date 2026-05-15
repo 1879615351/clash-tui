@@ -72,22 +72,44 @@ impl CoreManager {
 
     /// Save subscription config and merged main config. Returns the main config path.
     pub fn save_subscription_config(name: &str, yaml: &str) -> anyhow::Result<String> {
+        Self::save_subscription_config_with_api(name, yaml, "127.0.0.1", 9090)
+    }
+
+    /// Save subscription config with explicit API host/port.
+    pub fn save_subscription_config_with_api(
+        name: &str, yaml: &str, api_host: &str, api_port: u16,
+    ) -> anyhow::Result<String> {
         let dir = Self::core_dir()?;
         std::fs::create_dir_all(&dir)?;
 
         let sub_path = dir.join(format!("sub_{}.yaml", sanitize_name(name)));
         std::fs::write(&sub_path, yaml)?;
 
-        let main_config = Self::build_main_config(&dir)?;
+        let main_config = Self::build_main_config(&dir, api_host, api_port)?;
         let main_path = dir.join("config.yaml");
         std::fs::write(&main_path, &main_config)?;
 
         Ok(main_path.display().to_string())
     }
 
+    /// Regenerate the main config from available subscription files and write it to disk.
+    /// When no subscription files exist, writes a minimal valid config that lets mihomo
+    /// start cleanly (user can download subscriptions later).
+    pub fn regenerate_main_config(api_host: &str, api_port: u16) -> anyhow::Result<()> {
+        let dir = Self::core_dir()?;
+        let config = Self::build_main_config(&dir, api_host, api_port)?;
+        std::fs::write(dir.join("config.yaml"), &config)?;
+        Ok(())
+    }
+
     /// Build the main clash config by merging all subscription files.
     /// Each subscription is included as a file-based proxy-provider.
-    fn build_main_config(workdir: &std::path::Path) -> anyhow::Result<String> {
+    fn build_main_config(
+        workdir: &std::path::Path,
+        api_host: &str,
+        api_port: u16,
+    ) -> anyhow::Result<String> {
+        let ext_controller = format!("{}:{}", api_host, api_port);
         let mut subs = Vec::new();
         if let Ok(entries) = std::fs::read_dir(workdir) {
             for entry in entries.flatten() {
@@ -106,9 +128,9 @@ impl CoreManager {
         }
 
         if subs.is_empty() {
-            // No subscriptions — return minimal config
-            return Ok(String::from(
-                "mixed-port: 7890\nallow-lan: true\nmode: rule\nlog-level: info\n",
+            return Ok(format!(
+                "mixed-port: 7890\nexternal-controller: {}\nallow-lan: false\nmode: rule\nlog-level: info\n",
+                ext_controller,
             ));
         }
 
@@ -117,23 +139,26 @@ impl CoreManager {
         if subs.len() == 1 {
             let content = std::fs::read_to_string(&subs[0].1)?;
             if content.contains("port:") || content.contains("mixed-port:") {
-                // Clean up problematic config entries:
-                // - Remove authentication (it enables auth)
-                // - Remove/comment GEOIP rules (require MMDB download, blocked in CN)
+                // Ensure external-controller is set correctly
                 let content = content
                     .lines()
                     .filter(|l| {
-                        !l.starts_with("authentication:") && !l.trim_start().starts_with("- GEOIP,")
+                        !l.starts_with("authentication:")
+                            && !l.trim_start().starts_with("- GEOIP,")
+                            && !l.starts_with("external-controller:")
                     })
                     .collect::<Vec<_>>()
                     .join("\n");
-                return Ok(content);
+                return Ok(format!(
+                    "{}\nexternal-controller: {}\n",
+                    content, ext_controller,
+                ));
             }
         }
 
         // Multiple subscriptions — merge via proxy-providers
         let mut config = String::new();
-        config.push_str("mixed-port: 7890\n");
+        config.push_str(&format!("mixed-port: 7890\nexternal-controller: {}\n", ext_controller));
         config.push_str("allow-lan: true\n");
         config.push_str("mode: rule\n");
         config.push_str("log-level: info\n\n");

@@ -3,9 +3,11 @@ use std::panic;
 use clap::Parser;
 use clash_tui::app::App;
 use clash_tui::clash::client::ClashClient;
+use clash_tui::clash::RefreshData;
 use clash_tui::config::AppConfig;
 use clash_tui::ui;
 use clash_tui::ui::theme::Theme;
+use tokio::sync::mpsc;
 
 #[derive(Parser, Debug)]
 #[command(name = "clash-tui", version, about = "Clash TUI Client")]
@@ -91,18 +93,20 @@ fn run_tui(config: AppConfig, cli: Cli) -> anyhow::Result<()> {
         let clash_client = rt.block_on(async {
             clash_tui::clash::ipc_client::IpcClashClient::connect(port).await
         })?;
-        run_app_with_client(config, theme, Box::new(clash_client), &rt)
+        let (data_tx, data_rx) = mpsc::unbounded_channel();
+        run_app_with_client(config, theme, Box::new(clash_client), data_tx, data_rx, &rt)
     } else {
-        // Start TUI immediately. Mihomo boots in background via startup task in app.rs.
         tracing::info!("Monolithic mode: API at {}:{}", cli.host, cli.api_port);
         let clash_client = ClashClient::new(&cli.host, cli.api_port, config.api.secret.clone());
-        // Spawn mihomo in background (non-blocking)
+        let (data_tx, data_rx) = mpsc::unbounded_channel::<RefreshData>();
+        // Spawn mihomo in background; it will push RefreshData once the API is up
+        let bg_tx = data_tx.clone();
         let host = cli.host.clone();
         let port = cli.api_port;
         rt.spawn(async move {
-            start_mihomo_background(&host, port).await;
+            start_mihomo_background(&host, port, bg_tx).await;
         });
-        run_app_with_client(config, theme, Box::new(clash_client), &rt)
+        run_app_with_client(config, theme, Box::new(clash_client), data_tx, data_rx, &rt)
     }
 }
 
@@ -110,11 +114,13 @@ fn run_app_with_client(
     config: AppConfig,
     theme: Theme,
     clash_client: Box<dyn clash_tui::clash::ClashApi>,
+    data_tx: mpsc::UnboundedSender<RefreshData>,
+    data_rx: mpsc::UnboundedReceiver<RefreshData>,
     rt: &tokio::runtime::Runtime,
 ) -> anyhow::Result<()> {
     let mut terminal = ui::init()?;
 
-    let mut app = App::with_client(config, theme, clash_client, rt.handle().clone());
+    let mut app = App::with_client(config, theme, clash_client, data_tx, data_rx, rt.handle().clone());
     let result = rt.block_on(app.run_async(&mut terminal));
 
     ui::restore()?;
@@ -124,8 +130,9 @@ fn run_app_with_client(
     Ok(())
 }
 
-/// Start mihomo in the background. Returns when the API is reachable.
-async fn start_mihomo_background(host: &str, port: u16) {
+/// Start mihomo in the background. Once the API is reachable, pushes initial
+/// RefreshData through `data_tx` so the TUI updates its connection status immediately.
+async fn start_mihomo_background(host: &str, port: u16, data_tx: mpsc::UnboundedSender<RefreshData>) {
     // Kill any stale mihomo first
     #[cfg(windows)]
     {
@@ -152,19 +159,16 @@ async fn start_mihomo_background(host: &str, port: u16) {
             return;
         }
     };
-    let config_yaml = core_dir.join("config.yaml");
-    if !config_yaml.exists() {
-        let default_config = format!(
-            "mixed-port: 7890\nsocks-port: 7891\nexternal-controller: {}:{}\nallow-lan: false\nmode: rule\nlog-level: info\n",
-            host, port
-        );
-        let _ = std::fs::create_dir_all(&core_dir);
-        let _ = std::fs::write(&config_yaml, default_config);
+    // Always regenerate config from available subscription files.
+    // If sub_*.yaml files are missing (e.g. deleted since last session),
+    // a minimal valid config is written so mihomo can start cleanly.
+    if let Err(e) = clash_tui::core::CoreManager::regenerate_main_config(host, port) {
+        tracing::error!("Failed to regenerate config: {}", e);
     }
 
     let log_file = std::fs::File::create(core_dir.join("mihomo.log"))
         .unwrap_or_else(|_| std::fs::File::create("mihomo.log").unwrap());
-    let _ = std::process::Command::new(&core_binary)
+    let spawn_result = std::process::Command::new(&core_binary)
         .arg("-d")
         .arg(&core_dir)
         .stdout(
@@ -178,29 +182,49 @@ async fn start_mihomo_background(host: &str, port: u16) {
                 .unwrap_or_else(|_| std::fs::File::create("mihomo.log").unwrap()),
         )
         .spawn();
-
-    tracing::info!("Mihomo spawned, waiting for API...");
-    for _ in 0..20 {
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        if is_mihomo_ready(host, port).await {
-            tracing::info!("Mihomo API ready at {}:{}", host, port);
+    match spawn_result {
+        Ok(_child) => {
+            tracing::info!("Mihomo spawned, waiting for API...");
+        }
+        Err(e) => {
+            tracing::error!("Failed to spawn mihomo: {}", e);
             return;
         }
     }
-    tracing::warn!("Mihomo start timeout — will keep retrying in background");
-}
 
-async fn is_mihomo_ready(host: &str, port: u16) -> bool {
-    let url = format!("http://{}:{}/version", host, port);
-    match reqwest::Client::new()
-        .get(&url)
-        .timeout(std::time::Duration::from_secs(2))
-        .send()
-        .await
-    {
-        Ok(resp) => resp.status().is_success(),
-        Err(_) => false,
+    // Poll /version with a fast, lightweight HTTP check (not refresh_all).
+    // Using refresh_all here risks 10s hangs if mihomo's TCP port is open
+    // but the HTTP layer isn't ready yet — each of the 8 concurrent requests
+    // would block for the full timeout.
+    let check_url = format!("http://{}:{}/version", host, port);
+    for _ in 0..40 {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        match reqwest::Client::new()
+            .get(&check_url)
+            .timeout(std::time::Duration::from_secs(2))
+            .send()
+            .await
+        {
+            Ok(resp) if resp.status().is_success() => {
+                tracing::info!("Mihomo API ready at {}:{}", host, port);
+                // Push a lightweight signal — the refresh loop will deliver full data
+                let signal = RefreshData {
+                    core_version: "pending".into(),
+                    api_reachable: true,
+                    ..Default::default()
+                };
+                let _ = data_tx.send(signal);
+                return;
+            }
+            Ok(_) => {
+                // HTTP 4xx/5xx — mihomo initialising
+            }
+            Err(_) => {
+                // Not reachable yet
+            }
+        }
     }
+    tracing::warn!("Mihomo start timeout after 20s — will keep retrying via refresh loop");
 }
 
 fn cleanup_mihomo() {

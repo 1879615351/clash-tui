@@ -37,7 +37,7 @@ pub trait ClashApi: Send + Sync {
 }
 
 /// Combined refresh data used by the background task
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct RefreshData {
     pub proxy_groups: HashMap<String, ProxyGroup>,
     pub memory: u64,
@@ -49,4 +49,6 @@ pub struct RefreshData {
     pub connections: Vec<Connection>,
     pub logs: Vec<LogEntry>,
     pub rules: Vec<Rule>,
+    #[serde(default)]
+    pub api_reachable: bool,
 }

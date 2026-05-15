@@ -182,6 +182,8 @@ impl ClashApi for IpcClashClient {
             .await
             .send_request("refresh_all", serde_json::json!({}))
             .await?;
-        Ok(serde_json::from_value(resp)?)
+        let mut data: RefreshData = serde_json::from_value(resp)?;
+        data.api_reachable = !data.core_version.is_empty();
+        Ok(data)
     }
 }
